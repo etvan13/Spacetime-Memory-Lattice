@@ -84,7 +84,9 @@ class DataManager:
 
         # ── Attachments ─────────────────────────────────────────────────────
         if self.attachments_source_dir and getattr(block, "attachments", None):
-            att_dir = os.path.join(dir_path, "attachments", full_key)
+            # new: replace spaces with dashes for filesystem-safe folder names
+            sanitized_key = full_key.replace(" ", "-")
+            att_dir = os.path.join(dir_path, "attachments", sanitized_key)
             os.makedirs(att_dir, exist_ok=True)
             for fname in block.attachments:
                 src = os.path.join(self.attachments_source_dir, fname)

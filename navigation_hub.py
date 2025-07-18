@@ -234,33 +234,33 @@ def restore_conversation():
 
 # ── Mode 3: Recursively store ALL GPTSorted convos ──────────────────────────
 def store_all_conversations():
-    gpts_root = input("Path to GPTSorted root directory: ").strip()
+    gpts_root = input("Path to GPTSorted root directory (default 'GPTSorted'): ").strip() or "GPTSorted"
     data_root = input("Base data directory (default 'data'): ").strip() or "data"
 
-    # Initialize navigator at all-zero coordinate
-    init_coord        = "00 00 00 00 00 00"
-    nav               = NavigationHub(init_coord)
+    # ── Step 1: Prepare index list ─────────────────────────────────────────
+    index_mapping: list[tuple[str, str]] = []
+
+    # Initialize at all-zero coordinate
+    init_coord = "00 00 00 00 00 00"
+    nav = NavigationHub(init_coord)
     current_coord_str = init_coord
 
     dm = DataManager(base_dir=data_root)
-
-    # We'll collect (key, start_coord) pairs here
-    index_mapping: list[tuple[str,str]] = []
 
     for convo_name in sorted(os.listdir(gpts_root)):
         convo_dir = os.path.join(gpts_root, convo_name)
         if not os.path.isdir(convo_dir):
             continue
 
-        # 1) Record the starting coordinate for this key
+        # ── Step 2: Record starting coordinate for this key ────────────────
         index_mapping.append((convo_name, current_coord_str))
         print(f"\n--- Processing '{convo_name}' from {current_coord_str} ---")
 
-        # 2) Seed the nav path from that start
+        # Seed the nav path from that coordinate
         nav.default(key=convo_name, start=current_coord_str)
         dm.attachments_source_dir = convo_dir
 
-        # 3) Load and store
+        # Load conversation JSON
         json_files = [f for f in os.listdir(convo_dir) if f.endswith(".json")]
         if not json_files:
             print(f"⚠️ No .json in {convo_dir}, skipping.")
@@ -268,17 +268,17 @@ def store_all_conversations():
         with open(os.path.join(convo_dir, json_files[0]), "r", encoding="utf-8") as f:
             convo = json.load(f)
 
-        messages    = convo.get("messages", [])
+        messages = convo.get("messages", [])
         attachments = convo.get("attachments", [])
 
-        coord_inst       = Coordinate()
-        current_coord_str= coord_inst.strCoord_conv(nav.active_path.coord_dec)
+        coord_inst = Coordinate()
+        current_coord_str = coord_inst.strCoord_conv(nav.active_path.coord_dec)
         current_universe = nav.active_path.imag
-        blocks_count     = 0
+        blocks_count = 0
 
         for i in range(0, len(messages), 2):
-            user_msg = messages[i].get("content","")
-            bot_msg  = messages[i+1].get("content","") if i+1 < len(messages) else ""
+            user_msg = messages[i].get("content", "")
+            bot_msg = messages[i + 1].get("content", "") if i + 1 < len(messages) else ""
 
             used_atts = [
                 att for att in attachments
@@ -286,22 +286,23 @@ def store_all_conversations():
             ]
 
             block = BlockData(
-                block       = {"user": user_msg, "assistant": bot_msg},
-                universe    = current_universe,
-                attachments = used_atts
+                block={"user": user_msg, "assistant": bot_msg},
+                universe=current_universe,
+                attachments=used_atts
             )
 
             dm.create_coordinate_block(current_coord_str, block)
             blocks_count += 1
 
-            # step to next
+            # Step forward
             current_coord_str = nav.active_path.step()
-            current_universe  = nav.active_path.imag
+            current_universe = nav.active_path.imag
 
         print(f"✅ '{convo_name}': stored {blocks_count} blocks; ended at {current_coord_str}")
 
-    # ── Save & Print the index mapping ────────────────────────────────────────
+    # ── Step 3: Save conversation index ────────────────────────────────────
     idx_path = os.path.join(data_root, "conversation_index.txt")
+    os.makedirs(data_root, exist_ok=True)
     with open(idx_path, "w", encoding="utf-8") as f:
         for key, coord in index_mapping:
             f.write(f"{key}: {coord}\n")

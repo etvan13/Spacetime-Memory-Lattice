@@ -58,8 +58,14 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
 def extract_attachments(messages: list[dict]) -> set[str]:
     attachments = set()
     for msg in messages:
-        matches = re.findall(r"\[File\]: ([\w.\-]+)", msg["content"])
-        attachments.update(matches)
+        lines = msg["content"].splitlines()
+        for line in lines:
+            m = re.match(r"^\[File\]:\s*([\w .()\[\]\-]+)$", line)
+            if m:
+                attachments.add(m.group(1))
+            else:
+                # stop reading once real content begins
+                break
     return attachments
 
 def find_file(filename: str, root: Path) -> Path | None:
@@ -114,7 +120,7 @@ def main():
             if src:
                 shutil.copy(src, folder / fn)
             else:
-                print(f"⚠️  Missing asset: {fn} in '{title}'")
+                print(f"⚠️  Potentially missed asset: {fn} in '{title}' (could just be a [File]: (text) reference in content)")
 
         # Save conversation as JSON
         out_file = folder / f"{slug}.json"
@@ -124,10 +130,6 @@ def main():
                 "attachments": sorted(list(attachments)),
                 "messages": messages
             }, f, ensure_ascii=False, indent=2)
-
-        # Optional: add README to each folder
-        readme = folder / "README.md"
-        readme.write_text(f"# {title}\n\nThis folder contains the GPT conversation and its attachments.\n", encoding="utf-8")
 
     print(f"✅ Exported {len(convs)} conversations to '{OUT_DIR}'")
 
