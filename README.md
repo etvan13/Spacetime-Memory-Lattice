@@ -7,12 +7,12 @@
 
 **2. Place Raw HTML**
 1) Move the unzipped contents into:
-'''SortGPT/GPTData/'''
+```SortGPT/GPTData/```
 2) You should now have SortGPT/GPTData/chat.html and other relevant data
 
 **3. Extract JSON**
-'''cd SortGPT'''
-'''python extractor.py'''
+```cd SortGPT```
+```python extractor.py```
 ⚠️ This will take some time
 This generates:
   * GPTData/conversations.json
@@ -20,16 +20,16 @@ This generates:
 These are used to match conversation titles and linked file attachments.
 
 **4. Sort Conversations**
-'''python GPTSort.py'''
+```python GPTSort.py```
 This creates a GPTSorted/ folder with one folder per conversation, each containing:
   * A .json file with messages
   * Any attachments that were linked in the conversation
 
 ***5. Store into Coordinates***
 Navigate back to the project root
-'''cd ..'''
+```cd ..```
 Run script to store GPT data into coordinate structure
-'''python navigation_hub.py'''
+```python navigation_hub.py```
   * Choose option 3 (recurse store)
   * For input, point to the GPTSorted/ directory
   * Set base data dir as data
@@ -41,7 +41,7 @@ This will assign each conversation to a path through the coordinate space, stori
 
 6. Restore a Conversation
 To bring back a saved conversation:
-'''python navigation_hub.py'''
+```python navigation_hub.py```
   * Choose option 2 (restore)
   * Look up the starting coordinate and key in:
   data/conversation_index.txt
