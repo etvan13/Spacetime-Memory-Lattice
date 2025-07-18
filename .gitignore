@@ -1,0 +1,20 @@
+# === Ignore stored coordinate data ===
+/data/**
+!/data/.gitkeep
+
+# === Ignore raw GPT export and processed inputs ===
+/SortGPT/GPTData/**
+!/SortGPT/GPTData/.gitkeep
+
+# === Ignore sorted GPT output but keep the folder ===
+/GPTSorted/**
+!/GPTSorted/.gitkeep
+
+# === Python / OS clutter ===
+__pycache__/
+*.pyc
+*.pyo
+*.DS_Store
+
+# Virtual environment
+.venv/
