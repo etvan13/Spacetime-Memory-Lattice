@@ -11,6 +11,7 @@
 2) You should now have SortGPT/GPTData/chat.html and other relevant data
 
 **3. Extract JSON**
+
 ```cd SortGPT```
 ```python extractor.py```
 ⚠️ This will take some time
