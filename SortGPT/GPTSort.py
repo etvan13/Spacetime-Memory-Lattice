@@ -4,6 +4,7 @@ import shutil
 from pathlib import Path
 from slugify import slugify
 from html import unescape
+from collections import defaultdict
 
 # ── CONFIG ───────────────────────────────────────────────────
 # assume this script is run from SortGPT/
@@ -17,6 +18,23 @@ MAX_SLUG    = 80
 
 def clean(name: str) -> str:
     return slugify(name, max_length=MAX_SLUG) or "untitled"
+
+def generate_slug_map(convs):
+    """Group conversations by title, sorted by create_time."""
+    title_groups = defaultdict(list)
+    for conv in convs:
+        title = conv.get("title") or "Untitled"
+        title_groups[title].append(conv)
+
+    slug_map = {}
+    for title, group in title_groups.items():
+        group.sort(key=lambda x: x.get("create_time", 0))  # oldest to newest
+        for i, conv in enumerate(group):
+            base = clean(title)
+            suffix = "" if i == 0 else f"-{i+1}"
+            slug = f"{base}{suffix}"
+            slug_map[id(conv)] = slug
+    return slug_map
 
 def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
     msgs = []
@@ -60,13 +78,19 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
         # Metadata
         message_id = msg.get("id", "")
         timestamp = msg.get("create_time", 0.0)
+        model = msg.get("metadata", {}).get("model_slug", "")
+        end_turn = msg.get("end_turn", False)
 
         msgs.append({
             "role": speaker,
             "content": content,
             "timestamp": timestamp,
-            "id": message_id,
-            "parent": node.get("parent", "")
+            "_meta": {
+                "id": message_id,
+                "parent": node.get("parent", ""),
+                "model": model,
+                "end_turn": end_turn
+            }
         })
 
     return list(reversed(msgs))
@@ -118,9 +142,12 @@ def main():
     convs  = json.loads(CONV_JSON.read_text(encoding="utf-8"))
     assets = json.loads(ASSETS_JSON.read_text(encoding="utf-8"))
 
+    slug_map = generate_slug_map(convs)
+
+
     for conv in convs:
         title = conv.get("title") or "Untitled"
-        slug  = clean(title)
+        slug  = slug_map[id(conv)]
         folder = OUT_DIR / slug
         folder.mkdir(exist_ok=True)
 
@@ -144,7 +171,13 @@ def main():
             json.dump({
                 "title": title,
                 "attachments": sorted(list(attachments)),
-                "messages": messages
+                "messages": messages,
+                "_meta": {
+                    "conversation_id": conv.get("id", ""),
+                    "create_time": conv.get("create_time", 0),
+                    "current_node": conv.get("current_node", ""),
+                    "message_count": len(messages)
+                }
             }, f, ensure_ascii=False, indent=2)
 
     print(f"✅ Exported {len(convs)} conversations to '{OUT_DIR}'")
