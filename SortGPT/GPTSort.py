@@ -28,9 +28,11 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
         node_id = node.get("parent") if node else None
         if not node:
             break
+
         msg = node.get("message")
         if not msg or not msg.get("content", {}).get("parts"):
             continue
+
         role = msg.get("author", {}).get("role")
         if role in ("assistant", "tool"):
             speaker = "assistant"
@@ -38,6 +40,8 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
             speaker = "user"
         else:
             continue
+
+        # Content extraction
         texts = []
         for part in msg["content"]["parts"]:
             if isinstance(part, str):
@@ -50,8 +54,20 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
                     url = asset_map.get(ptr)
                     fname = Path(url).name if url else None
                     texts.append(f"[File]: {fname or 'MISSING'}")
+
         content = "\n\n".join(texts).strip()
-        msgs.append({"role": speaker, "content": content})
+        
+        # Metadata
+        message_id = msg.get("id", "")
+        timestamp = msg.get("create_time", 0.0)
+
+        msgs.append({
+            "role": speaker,
+            "content": content,
+            "timestamp": timestamp,
+            "id": message_id,
+            "parent": node.get("parent", "")
+        })
 
     return list(reversed(msgs))
 
