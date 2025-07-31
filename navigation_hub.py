@@ -369,7 +369,7 @@ def restore_conversation():
 # ── Mode 3: Recursively store ALL GPTSorted convos ──────────────────────────
 def store_all_conversations():
     gpts_root = input("Path to GPTSorted root directory (default 'GPTSorted'): ").strip() or "GPTSorted"
-    data_root = input("Base data directory (default 'data'): ").strip() or "data"
+    data_root = input("Base data directory (default 'data'): ").strip() or "coordinate_data"
 
     # ── Step 1: Prepare index list ─────────────────────────────────────────
     index_mapping: list[tuple[str, str]] = []

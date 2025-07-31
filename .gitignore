@@ -1,14 +1,21 @@
 # === Ignore stored coordinate data ===
-/data/**
-!/data/.gitkeep
+/coordinate_data/**
+!/coordinate_data/.gitkeep
 
 # === Ignore raw GPT export and processed inputs ===
-/SortGPT/GPTData/**
-!/SortGPT/GPTData/.gitkeep
+/GPTData/**
+!/GPTData/.gitkeep
+/GPTDataNew/
+
+# === Ignore delta data ===
+/delta/appending/**
+!/delta/appending/.gitkeep
+/delta/new_chats/**
+!/delta/new_chats/.gitkeep
 
 # === Ignore sorted GPT output but keep the folder ===
-/GPTSorted/**
-!/GPTSorted/.gitkeep
+/Sorted_GPT_Data/**
+!/Sorted_GPT_Data/.gitkeep
 
 # === Python / OS clutter ===
 __pycache__/
