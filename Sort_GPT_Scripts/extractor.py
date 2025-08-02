@@ -1,8 +1,12 @@
 import pathlib, json, time
+from pathlib import Path
 from selenium import webdriver
 
 # point to the chat.html inside GPTData
-data_dir = pathlib.Path.cwd() / "GPTData"
+THIS_DIR = Path(__file__).resolve().parent
+BASE_DIR = THIS_DIR.parent
+
+data_dir = BASE_DIR / "GPTData" 
 html_path = data_dir / "chat.html"
 
 driver = webdriver.Chrome()

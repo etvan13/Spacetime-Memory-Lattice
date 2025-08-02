@@ -32,7 +32,7 @@ class DataManager:
         )
         self.attachments_source_dir = attachments_source_dir
 
-        self.coordinate_dir = os.path.join(self.base_dir, "coordinate_data")
+        self.coordinate_dir = os.path.join(self.base_dir, "data")
         os.makedirs(self.coordinate_dir, exist_ok=True)
 
     # ── Private helpers ───────────────────────────────────────────────────────
