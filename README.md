@@ -68,7 +68,7 @@ python navigation_hub.py
   * Choose option 2 (restore)
   * Look up the starting coordinate and key in:
   data/conversation_index.txt
-  * Enter the coordinate (e.g., `00 00 00 00 00 00`)
+  * Enter the coordinate (e.g., `0 0 0 0 0 0`)
   and the key (conversation folder name)
 This will replay the blocks, printing user/assistant messages and attachments.
 
