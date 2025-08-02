@@ -31,14 +31,16 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
     msgs = []
     mapping = conv.get("mapping", {})
     node_id = conv.get("current_node")
-
     while node_id:
         node = mapping.get(node_id)
         node_id = node.get("parent") if node else None
         if not node:
             break
         msg = node.get("message")
-        if not msg or not msg.get("content", {}).get("parts"):
+        if not msg:
+            continue
+        parts = msg.get("content", {}).get("parts") or []
+        if not parts:
             continue
         role = msg.get("author", {}).get("role")
         if role in ("assistant", "tool"):
@@ -48,7 +50,7 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
         else:
             continue
         texts = []
-        for part in msg["content"]["parts"]:
+        for part in parts:
             if isinstance(part, str):
                 texts.append(part)
             elif isinstance(part, dict):
@@ -62,29 +64,31 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
         content = "\n\n".join(texts).strip()
         timestamp = msg.get("create_time")
         model = msg.get("metadata", {}).get("model_slug")
-        msgs.append({"role": speaker, "content": content, "timestamp": timestamp, "model": model})
-
+        msgs.append({
+            "role": speaker,
+            "content": content,
+            "timestamp": timestamp,
+            "model": model
+        })
     return list(reversed(msgs))
 
-def extract_attachments(messages: list[dict]) -> set[str]:
+def extract_attachments(messages: list[dict]) -> list[str]:
     attachments = set()
     for msg in messages:
-        lines = msg["content"].splitlines()
-        for line in lines:
+        for line in msg["content"].splitlines():
             m = re.match(r"^\[File\]:\s*([\w .()\[\]\-]+)$", line)
             if m:
                 attachments.add(m.group(1))
-    return attachments
+            else:
+                break
+    return sorted(attachments)
 
 def find_file(filename: str, root: Path) -> Path | None:
-    for p in root.rglob(filename):
-        return p
-    return None
+    return next(root.rglob(filename), None)
 
 def clean_content(messages: list[dict]) -> None:
     for msg in messages:
-        msg["content"] = unescape(msg["content"])
-        msg["content"] = msg["content"].replace("\uFFFD", "'")
+        msg["content"] = unescape(msg["content"]).replace("\uFFFD", "'")
 
 def group_messages(msgs: list[dict]) -> list[dict]:
     if not msgs:
@@ -120,6 +124,7 @@ def main():
     convs  = json.loads(CONV_JSON.read_text(encoding="utf-8"))
     assets = json.loads(ASSETS_JSON.read_text(encoding="utf-8"))
 
+    # Index existing by ID
     existing_ids = {}
     for folder in OUT_DIR.glob("*--*"):
         meta_file = next(folder.glob("*.json"), None)
@@ -128,19 +133,17 @@ def main():
         try:
             data = json.loads(meta_file.read_text(encoding="utf-8"))
             if "id" in data:
-                existing_ids[data["id"]] = {
-                    "path": meta_file,
-                    "messages": data.get("messages", [])
-                }
-        except Exception:
+                existing_ids[data["id"]] = data.get("messages", [])
+        except:
             continue
 
-    updated, skipped, errors = 0, 0, []
-
+    updated = skipped = 0
+    errors = []
     total = len(convs)
+
     for idx, conv in enumerate(convs, 1):
-        title = conv.get("title") or "Untitled"
-        conv_id = conv.get("conversation_id")
+        title    = conv.get("title") or "Untitled"
+        conv_id  = conv.get("conversation_id")
         clean_title = clean(title)
         folder_name = f"{clean_title}--{conv_id}"
         folder = OUT_DIR / folder_name
@@ -150,9 +153,11 @@ def main():
             messages = extract_msgs(conv, assets)
             clean_content(messages)
             messages = group_messages(messages)
+            attachments = extract_attachments(messages)
 
+            # Append case
             if conv_id in existing_ids:
-                existing = existing_ids[conv_id]["messages"]
+                existing = existing_ids[conv_id]
                 if len(messages) < len(existing):
                     skipped += 1
                     progress_bar(idx, total, "🔹 skipped (truncated)")
@@ -162,39 +167,44 @@ def main():
                         skipped += 1
                         progress_bar(idx, total, "🔹 skipped (same)")
                         continue
-                    # Append case
+                    # truly new blocks
                     delta_msgs = messages[len(existing):]
+                    new_atts   = extract_attachments(delta_msgs)
 
-                    # copy any brand-new attachments
-                    new_atts = extract_attachments(delta_msgs)
-                    for fn in new_atts:
-                        dst = folder / fn
-                        if not dst.exists():
-                            src = find_file(fn, ROOT_DIR)
-                            if src: shutil.copy(src, dst)
-
+                    # ensure sorted folder exists and update full JSON
                     folder.mkdir(parents=True, exist_ok=True)
                     full_atts = extract_attachments(messages)
+                    with open(out_json, "w", encoding="utf-8") as f:
+                        json.dump({
+                            "title": title,
+                            "id": conv_id,
+                            "create_time": conv.get("create_time"),
+                            "model": conv.get("model"),
+                            "message_count": len(messages),
+                            "attachments": full_atts,
+                            "messages": messages
+                        }, f, ensure_ascii=False, indent=2)
 
-                    json.dump({
-                        "title": title,
-                        "id": conv_id,
-                        "create_time": conv.get("create_time"),
-                        "model": conv.get("model"),
-                        "message_count": len(messages),
-                        "attachments": sorted(list(full_atts)),
-                        "messages": messages
-                    }, out_json.open("w", encoding="utf-8"), ensure_ascii=False, indent=2)
-
-                    delta_folder = APPEND_DELTA / folder_name
-                    delta_folder.mkdir(parents=True, exist_ok=True)
-                    delta_path = delta_folder / f"{clean_title}.json"
-                    json.dump({
-                        "id": conv_id,
-                        "title": clean_title,
-                        "new_message_count": len(delta_msgs),
-                        "messages": delta_msgs
-                    }, delta_path.open("w", encoding="utf-8"), ensure_ascii=False, indent=2)
+                    # write delta identical format
+                    APPEND_DELTA.mkdir(parents=True, exist_ok=True)
+                    ddir = APPEND_DELTA / folder_name
+                    ddir.mkdir(parents=True, exist_ok=True)
+                    # copy new attachments
+                    for fn in new_atts:
+                        src = find_file(fn, ROOT_DIR)
+                        if src:
+                            shutil.copy(src, ddir / fn)
+                    # dump delta JSON
+                    with open(ddir / f"{clean_title}.json", "w", encoding="utf-8") as df:
+                        json.dump({
+                            "title": title,
+                            "id": conv_id,
+                            "create_time": conv.get("create_time"),
+                            "model": conv.get("model"),
+                            "message_count": len(delta_msgs),
+                            "attachments": new_atts,
+                            "messages": delta_msgs
+                        }, df, ensure_ascii=False, indent=2)
 
                     updated += 1
                     progress_bar(idx, total, "✅ updated")
@@ -202,34 +212,43 @@ def main():
 
             # New conversation
             folder.mkdir(parents=True, exist_ok=True)
-            attachments = extract_attachments(messages)
+            # copy all attachments into sorted
             for fn in attachments:
                 src = find_file(fn, ROOT_DIR)
                 if src:
                     shutil.copy(src, folder / fn)
+            # write sorted JSON
+            with open(out_json, "w", encoding="utf-8") as f:
+                json.dump({
+                    "title": title,
+                    "id": conv_id,
+                    "create_time": conv.get("create_time"),
+                    "model": conv.get("model"),
+                    "message_count": len(messages),
+                    "attachments": attachments,
+                    "messages": messages
+                }, f, ensure_ascii=False, indent=2)
 
-            json.dump({
-                "title": title,
-                "id": conv_id,
-                "create_time": conv.get("create_time"),
-                "model": conv.get("model"),
-                "message_count": len(messages),
-                "attachments": sorted(list(attachments)),
-                "messages": messages
-            }, out_json.open("w", encoding="utf-8"), ensure_ascii=False, indent=2)
-
-            delta_folder = NEW_DELTA / folder_name
-            delta_folder.mkdir(parents=True, exist_ok=True)
-            delta_path = delta_folder / f"{clean_title}.json"
-            json.dump({
-                "title": title,
-                "id": conv_id,
-                "create_time": conv.get("create_time"),
-                "model": conv.get("model"),
-                "message_count": len(messages),
-                "attachments": sorted(list(attachments)),
-                "messages": messages
-            }, delta_path.open("w", encoding="utf-8"), ensure_ascii=False, indent=2)
+            # write new chat delta
+            NEW_DELTA.mkdir(parents=True, exist_ok=True)
+            ndir = NEW_DELTA / folder_name
+            ndir.mkdir(parents=True, exist_ok=True)
+            # copy attachments
+            for fn in attachments:
+                src = find_file(fn, ROOT_DIR)
+                if src:
+                    shutil.copy(src, ndir / fn)
+            # dump delta JSON
+            with open(ndir / f"{clean_title}.json", "w", encoding="utf-8") as df:
+                json.dump({
+                    "title": title,
+                    "id": conv_id,
+                    "create_time": conv.get("create_time"),
+                    "model": conv.get("model"),
+                    "message_count": len(messages),
+                    "attachments": attachments,
+                    "messages": messages
+                }, df, ensure_ascii=False, indent=2)
 
             updated += 1
             progress_bar(idx, total, "✨ added")
@@ -238,9 +257,9 @@ def main():
             errors.append((title, str(e)))
             progress_bar(idx, total, "❌ error")
 
-    print(f"\n✅ Done. {updated} updated or added, {skipped} skipped, {len(errors)} errors.")
-    for title, msg in errors:
-        print(f"⚠️  {title}: {msg}")
+    print(f"\n✅ Done. {updated} updated/added, {skipped} skipped, {len(errors)} errors.")
+    for t, m in errors:
+        print(f"⚠️  {t}: {m}")
 
 if __name__ == "__main__":
     main()

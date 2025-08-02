@@ -7,19 +7,18 @@ from html import unescape
 
 # ── CONFIG ───────────────────────────────────────────────────────────
 
-THIS_DIR = Path(__file__).resolve().parent
-BASE_DIR = THIS_DIR.parent
-ROOT_DIR = BASE_DIR / "GPTData"
+THIS_DIR    = Path(__file__).resolve().parent
+BASE_DIR    = THIS_DIR.parent
+ROOT_DIR    = BASE_DIR / "GPTData"
 
-CONV_JSON = ROOT_DIR / "conversations.json"
+CONV_JSON   = ROOT_DIR / "conversations.json"
 ASSETS_JSON = ROOT_DIR / "assets.json"
 
-SORTED_DIR = BASE_DIR / "Sorted_GPT_Data"
-DELTA_DIR = BASE_DIR / "delta"
+SORTED_DIR  = BASE_DIR / "Sorted_GPT_Data"
+DELTA_DIR   = BASE_DIR / "delta"  # contains subdirs new_chats/ and appending/
+MAX_SLUG    = 80
 
-MAX_SLUG = 80
-
-# ── UTILS ─────────────────────────────────────────────────────────────
+# ── UTIL FUNCTIONS ───────────────────────────────────────────────────
 
 def clean(name: str) -> str:
     return slugify(name, max_length=MAX_SLUG) or "untitled"
@@ -34,9 +33,15 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
         node_id = node.get("parent") if node else None
         if not node:
             break
+
         msg = node.get("message")
-        if not msg or not msg.get("content", {}).get("parts"):
+        if not msg:
             continue
+
+        parts = msg.get("content", {}).get("parts") or []
+        if not parts:
+            continue
+
         role = msg.get("author", {}).get("role")
         if role in ("assistant", "tool"):
             speaker = "assistant"
@@ -44,8 +49,9 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
             speaker = "user"
         else:
             continue
+
         texts = []
-        for part in msg["content"]["parts"]:
+        for part in parts:
             if isinstance(part, str):
                 texts.append(part)
             elif isinstance(part, dict):
@@ -56,26 +62,34 @@ def extract_msgs(conv: dict, asset_map: dict) -> list[dict]:
                     url = asset_map.get(ptr)
                     fname = Path(url).name if url else None
                     texts.append(f"[File]: {fname or 'MISSING'}")
-        content = "\n\n".join(texts).strip()
-        msgs.append({"role": speaker, "content": content})
+
+        content   = "\n\n".join(texts).strip()
+        timestamp = msg.get("create_time")
+        model     = msg.get("metadata", {}).get("model_slug")
+
+        msgs.append({
+            "role":      speaker,
+            "content":   content,
+            "timestamp": timestamp,
+            "model":     model
+        })
+
     return list(reversed(msgs))
 
-def extract_attachments(messages: list[dict]) -> set[str]:
+
+def extract_attachments(messages: list[dict]) -> list[str]:
     attachments = set()
     for msg in messages:
-        lines = msg["content"].splitlines()
-        for line in lines:
+        for line in msg["content"].splitlines():
             m = re.match(r"^\[File\]:\s*([\w .()\[\]\-]+)$", line)
             if m:
                 attachments.add(m.group(1))
             else:
                 break
-    return attachments
+    return sorted(attachments)
 
 def find_file(filename: str, root: Path) -> Path | None:
-    for p in root.rglob(filename):
-        return p
-    return None
+    return next(root.rglob(filename), None)
 
 def clean_content(messages: list[dict]) -> None:
     for msg in messages:
@@ -88,6 +102,7 @@ def group_messages(msgs: list[dict]) -> list[dict]:
     curr = msgs[0].copy()
     for m in msgs[1:]:
         if m["role"] == curr["role"]:
+            # merge content but KEEP original timestamp+model
             curr["content"] += "\n\n" + m["content"]
         else:
             grouped.append(curr)
@@ -100,26 +115,47 @@ def find_existing_by_id(conv_id: str) -> Path | None:
         if folder.is_dir():
             json_path = folder / f"{folder.name.split('--')[0]}.json"
             if json_path.exists():
-                with open(json_path, "r", encoding="utf-8") as f:
-                    old_data = json.load(f)
-                    if old_data.get("id") == conv_id:
-                        return json_path
+                data = json.loads(json_path.read_text(encoding="utf-8"))
+                if data.get("id") == conv_id:
+                    return json_path
     return None
 
-def write_delta(slug, conv_id, new_blocks, is_append, custom_slug=None):
+# ── DELTA WRITER ─────────────────────────────────────────────────────
+
+def write_delta(slug: str,
+                conv_id: str,
+                blocks: list[dict],
+                attachments: list[str],
+                title: str,
+                create_time,
+                model,
+                is_append: bool,
+                custom_slug: str = None):
+    """
+    Writes a delta JSON (same structure as sorted) and copies attachments.
+    """
     folder_type = "appending" if is_append else "new_chats"
-    slug_to_use = custom_slug or slug
-    delta_folder = DELTA_DIR / folder_type / f"{slug_to_use}--{conv_id}"
+    slug_use = custom_slug or slug
+    delta_folder = DELTA_DIR / folder_type / f"{slug_use}--{conv_id}"
     delta_folder.mkdir(parents=True, exist_ok=True)
-    out_path = delta_folder / f"{slug_to_use}.json"
-    delta_data = {
-        "id": conv_id,
-        "title": slug,
-        "new_block_count": len(new_blocks),
-        "messages": new_blocks
+    # copy attachments
+    for fn in attachments:
+        src = find_file(fn, ROOT_DIR)
+        if src:
+            shutil.copy(src, delta_folder / fn)
+    # write JSON
+    out_data = {
+        "title":           title,
+        "id":              conv_id,
+        "create_time":     create_time,
+        "model":           model,
+        "message_count":   len(blocks),
+        "attachments":     attachments,
+        "messages":        blocks
     }
+    out_path = delta_folder / f"{slug_use}.json"
     with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(delta_data, f, ensure_ascii=False, indent=2)
+        json.dump(out_data, f, ensure_ascii=False, indent=2)
     print(f"✅ Delta saved → {out_path.relative_to(DELTA_DIR.parent)}")
 
 # ── MAIN ──────────────────────────────────────────────────────────────
@@ -130,112 +166,99 @@ def main():
         return
 
     SORTED_DIR.mkdir(parents=True, exist_ok=True)
+    (DELTA_DIR / "new_chats").mkdir(parents=True, exist_ok=True)
+    (DELTA_DIR / "appending").mkdir(parents=True, exist_ok=True)
 
-    convs = json.loads(CONV_JSON.read_text(encoding="utf-8"))
+    convs  = json.loads(CONV_JSON.read_text(encoding="utf-8"))
     assets = json.loads(ASSETS_JSON.read_text(encoding="utf-8"))
 
+    # choose
     print("\nAvailable conversations:")
     for c in convs:
-        print(f" - {c.get('title', 'untitled')} [{c.get('id', '')[:4]}]")
-
-    user_input = input("\nEnter partial title or ID to store: ").strip().lower()
-    matches = [c for c in convs if user_input in (c.get("title") or "").lower() or user_input in c.get("id", "")]
-
+        print(f" - {c.get('title','untitled')} [{c.get('id','')[:4]}]")
+    query   = input("\nEnter partial title or ID to store: ").strip().lower()
+    matches = [c for c in convs if query in (c.get("title") or "").lower() or query in c.get("id","")]
     if not matches:
         print("❌ No matching conversation found.")
         return
-    elif len(matches) > 1:
+    if len(matches) > 1:
         print("⚠️ Multiple matches found:")
-        for i, c in enumerate(matches):
-            print(f"  [{i}] {c.get('title', 'untitled')} ({c.get('id')})")
-        idx = input("Enter index of desired conversation: ").strip()
-        if not idx.isdigit() or int(idx) >= len(matches):
-            print("❌ Invalid selection.")
-            return
-        target = matches[int(idx)]
+        for i,c in enumerate(matches): print(f"  [{i}] {c.get('title')} ({c.get('id')})")
+        idx = input("Select index: ").strip()
+        target = matches[int(idx)] if idx.isdigit() and int(idx)<len(matches) else matches[0]
     else:
         target = matches[0]
+        if input(f"\nSave '{target.get('title')}--{target.get('id')}'? [y/N]: ").lower()!="y":
+            print("❌ Operation cancelled.")
+            return
 
-    title = target.get("title", "untitled")
-    conv_id = target.get("id")
-    slug = clean(title)
-    slug_id = f"{slug}--{conv_id}"
-    folder = SORTED_DIR / slug_id
-    out_json = folder / f"{slug}.json"
+    title       = target.get("title","untitled")
+    conv_id     = target.get("id")
+    create_time = target.get("create_time")
+    model       = target.get("model")
+    slug        = clean(title)
+    slug_id     = f"{slug}--{conv_id}"
+    folder      = SORTED_DIR / slug_id
+    out_json    = folder / f"{slug}.json"
 
-    messages = extract_msgs(target, assets)
-    clean_content(messages)
-    messages = group_messages(messages)
-    attachments = extract_attachments(messages)
+    msgs        = extract_msgs(target, assets)
+    clean_content(msgs)
+    msgs        = group_messages(msgs)
+    attachments = extract_attachments(msgs)
 
-    was_appended = False
-    force_saved = False
-    suffix_num = 1
-
+    # check existing
     old_path = find_existing_by_id(conv_id)
-    if old_path and old_path.exists():
-        with open(old_path, "r", encoding="utf-8") as f:
-            old_data = json.load(f)
-        old_msgs = old_data.get("messages", [])
-
-        if len(messages) == len(old_msgs):
+    was_append = False
+    force_save = False
+    suffix = 1
+    if old_path:
+        old_data = json.loads(old_path.read_text(encoding="utf-8"))
+        old_msgs = old_data.get("messages",[])
+        if len(msgs) == len(old_msgs):
             print("✅ Conversation already stored. No new messages.")
-            response = input("Force save as new version? [y/n]: ").strip().lower()
-            if response != "y":
-                return
-            # Find next suffix
-            while True:
-                slug_with_suffix = f"{slug_id}__{suffix_num}"
-                test_folder = SORTED_DIR / slug_with_suffix
-                if not test_folder.exists():
-                    break
-                suffix_num += 1
-            folder = SORTED_DIR / slug_with_suffix
-            out_json = folder / f"{slug}.json"
-            force_saved = True
-        elif len(messages) > len(old_msgs):
-            new_msgs = messages[len(old_msgs):]
+            if input("Force save new version? [y/N]: ").lower()=="y":
+                while (SORTED_DIR/f"{slug_id}__{suffix}").exists(): suffix+=1
+                folder   = SORTED_DIR / f"{slug_id}__{suffix}"
+                out_json = folder / f"{slug}.json"
+                force_save = True
+        elif len(msgs) > len(old_msgs):
+            new_msgs = msgs[len(old_msgs):]
+            new_atts = extract_attachments(new_msgs)
+            # update sorted
             old_data["messages"].extend(new_msgs)
             old_data["message_count"] = len(old_data["messages"])
-
             with open(old_path, "w", encoding="utf-8") as f:
                 json.dump(old_data, f, ensure_ascii=False, indent=2)
-
-            was_appended = True
-            write_delta(slug, conv_id, new_msgs, is_append=True)
+            # delta append
+            write_delta(slug, conv_id, new_msgs, new_atts, title, create_time, model, is_append=True)
             print(f"✅ Appended {len(new_msgs)} new messages.")
             return
         else:
             print("⚠️ New data has fewer messages than stored copy. Skipping.")
             return
 
-    folder.mkdir(exist_ok=True)
+    # new or force-save
+    folder.mkdir(parents=True, exist_ok=True)
     for fn in attachments:
         src = find_file(fn, ROOT_DIR)
-        if src:
-            shutil.copy(src, folder / fn)
-        else:
-            print(f"⚠️ Missing asset: {fn}")
+        if src: shutil.copy(src, folder/fn)
+        else: print(f"⚠️ Missing asset: {fn}")
 
-    final_id = conv_id
-    if force_saved:
-        final_id = f"{conv_id}_{suffix_num}"
-
+    final_id = conv_id if not force_save else f"{conv_id}_{suffix}"
     out_data = {
-        "title": title,
-        "id": final_id,
-        "create_time": target.get("create_time"),
-        "model": target.get("model"),
-        "message_count": len(messages),
-        "attachments": sorted(list(attachments)),
-        "messages": messages
+        "title":         title,
+        "id":            final_id,
+        "create_time":   create_time,
+        "model":         model,
+        "message_count": len(msgs),
+        "attachments":   attachments,
+        "messages":      msgs
     }
-
     with open(out_json, "w", encoding="utf-8") as f:
         json.dump(out_data, f, ensure_ascii=False, indent=2)
 
-    custom_slug = slug_id if not force_saved else f"{slug_id}__{suffix_num}"
-    write_delta(slug, final_id, messages, is_append=False, custom_slug=custom_slug)
+    custom = slug_id if not force_save else f"{slug_id}__{suffix}"
+    write_delta(slug, final_id, msgs, attachments, title, create_time, model, is_append=False, custom_slug=custom)
     print(f"✅ Saved → {out_json.relative_to(SORTED_DIR.parent)}")
 
 if __name__ == "__main__":
