@@ -18,6 +18,9 @@
 /Sorted_GPT_Data/**
 !/Sorted_GPT_Data/.gitkeep
 
+# === Files
+/navigation_hub_old.py
+
 # === Python / OS clutter ===
 __pycache__/
 *.pyc
