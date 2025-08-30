@@ -6,7 +6,7 @@
 /GPTData/**
 !/GPTData/.gitkeep
 /GPTDataNew/
-/GPTDataOld/
+/GPTDataOld*/
 
 # === Ignore delta data ===
 /delta/appending/**

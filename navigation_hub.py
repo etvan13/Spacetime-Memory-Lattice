@@ -48,6 +48,9 @@ def save_current_coord(coord):
     with open(CURRENT_PATH, "w", encoding="utf-8") as f:
         json.dump({"current": coord}, f)
 
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
 # ── Default Navigation Path ────────────────────────────────────────
 class DefaultPath:
     def __init__(self, start_coord, key):
@@ -256,12 +259,37 @@ def restore_conversation():
         for i,(c,u,bl) in enumerate(blocks): print_blk(i,c,u,bl)
         print("\n✅ Restoration complete.")
     else:
-        idx=0
-        while idx<len(blocks):
-            print_blk(idx,*blocks[idx])
-            if input("Enter next or 'q' to quit: ").strip().lower()=='q': break
-            idx+=1
+        idx = 0
+        while 0 <= idx < len(blocks):
+            # Clear first so the top of the screen is the current block
+            clear_screen()
+
+            c, u, bl = blocks[idx]
+            print_blk(idx, c, u, bl)
+
+            # Footer at the bottom so it's visible after long content
+            next_line = f" | next: {blocks[idx+1][0]}" if idx + 1 < len(blocks) else ""
+            print(f"[end of block {idx+1}/{len(blocks)} @ {c} | universe {u}{next_line}]")
+
+            cmd = input("Press [Enter] for next, 'b' for back, or 'q' to quit: ").strip().lower()
+
+            if cmd in ("", "n", "next"):
+                idx += 1
+            elif cmd in ("b", "back"):
+                if idx > 0:
+                    idx -= 1
+                else:
+                    print("↩️ Already at the first block.")
+                    input("Press Enter to continue...")
+            elif cmd in ("q", "quit"):
+                break
+            else:
+                # Unknown input — stay on the same block
+                print("❓ Unknown command. Use Enter / b / q.")
+                input("Press Enter to continue...")
+
         print("\n✅ Restoration ended.")
+
 
 # ── Mode 3: Recursively store ALL GPTSorted convos ───────────────────
 def store_all_conversations():
