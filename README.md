@@ -55,6 +55,10 @@ python navigation_hub.py
   * For input, point to the `GPTSorted/` directory
   * Set base data dir as `data`
 
+Select batch source:
+  * Option 1 sorts all data regardless if existing in the coordinates (fresh store on empty coordinates)
+  * Option 2 appends new chats as well as updated existing conversations (adding onto already stored data on coordinates)
+
 This will assign each conversation to a path through the coordinate space, storing:
   * Messages in deterministic coordinates
   * Attachments in nested folders
