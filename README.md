@@ -70,9 +70,21 @@ To bring back a saved conversation:
 python navigation_hub.py
 ```
   * Choose option 2 (restore)
-  * Look up the starting coordinate and key in:
-  data/conversation_index.txt
-  * Enter the coordinate (e.g., `0 0 0 0 0 0`)
-  and the key (conversation folder name)
-This will replay the blocks, printing user/assistant messages and attachments.
-
+  * The program will list all indexed conversations by title and ID.
+  * At the prompt
+```
+Enter partial title or ID to restore:
+```
+type part of the conversation’s title or its ID (for example, wavefunction).
+  * If there are multiple matches, you’ll see a numbered list like:
+```
+⚠️ Multiple matches:
+  [0] geometric-quantum-wavefunction-refinement (abc123)
+  [1] particle-wavefunction-observables (def456)
+Enter index:
+```
+Type the number of the conversation you want.
+   * Confirm, then choose how to view:
+      * a → show all blocks at once
+      * s → step through one block at a time, with navigation (Enter = next, b = back, q = quit).
+During playback, each block prints the user/assistant messages, any attachments, and shows its coordinate + universe for orientation.
