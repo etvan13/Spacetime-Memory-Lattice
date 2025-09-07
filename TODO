@@ -1,0 +1,23 @@
+
+
+
+Okay need two things for sure:
+
+    * Fix Sort_GPT_Scripts/extractor.py so that it doesn't use internet
+        - It basically just collects all the conversation titles from the
+            openai's html formatted data file (one variable is like 100mb)
+        - Right now it's using a google page to open the html file and 
+            scans and stores all those titles from the page
+        - Instead should just do it a local way without the google page
+
+    * Fix Terminal/commands/search_titles.py so that it scans all the titles
+        from coordinate_data/conversation_index.json
+        - Right now it's messy. It should have a solid search engine
+        - Relating titles when searching specific terms scanning all titles
+        - ie: typing 'Quantum' brings up: 
+            [0] binary-vs-[quantum]-thinking       ▐  -mystery-discussion       
+            [1] formatting-[quantum]-curvature        -scale-explained          
+            [2] geometric-[quantum]-wavefunction-r…   -teleportation-over-fiber 
+            [3] h-bar-in-[quantum]-mechanics
+        - It should also show related titles (like maybe dark matter or 
+            physics topics) As if they have weights.
