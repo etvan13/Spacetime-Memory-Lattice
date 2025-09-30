@@ -297,8 +297,8 @@ def store_all_conversations():
     current = load_current_coord()
     print(f"Resuming from {current}")
     print("Select batch source:")
-    print(" 1) Sorted_GPT_Data")
-    print(" 2) delta folder (new_chats then appending)")
+    print(" 1) Sorted_GPT_Data *recommended if first time storing")
+    print(" 2) delta folder (new_chats then appending) *recommended if not first time")
     choice = input("Choice (1/2): ").strip()
 
     # helper to process a single folder
