@@ -1,0 +1,42 @@
+
+
+
+TODO:
+
+    *  Look at chat with the goal to restructure (makes storage more deterministic
+         so that complete resets don't affect the text alignment)
+
+    * Fix Terminal/commands/search_titles.py so that it scans all the titles
+        from coordinate_data/conversation_index.json
+        - Right now it's messy. It should have a solid search engine
+        - Relating titles when searching specific terms scanning all titles
+        - ie: typing 'Quantum' brings up: 
+            [0] binary-vs-[quantum]-thinking       ▐  -mystery-discussion       
+            [1] formatting-[quantum]-curvature        -scale-explained          
+            [2] geometric-[quantum]-wavefunction-r…   -teleportation-over-fiber 
+            [3] h-bar-in-[quantum]-mechanics
+        - It should also show related titles (like maybe dark matter or 
+            physics topics) As if they have weights.
+
+    * Build 'mini internet' for chat search
+        - Basically just takes all chat indexes and makes easy way to search thru
+
+    * Break navigation_hub down into separate files and make it terminal commands
+
+    * Fix the list to store/restore (it lets you type a bit then makes a list)
+        Make the search refined until it gets to a list of 10 maybe?
+
+    * Build a notes list, like:
+        "If I rename a GPT chat, the mapping stays the same, but the system may treat 
+         it as a new conversation key depending on how my sorter names folders. Title 
+         consistency keeps the logical history cleaner."
+
+
+DONE:
+
+    * Fix Sort_GPT_Scripts/extractor.py so that it doesn't use internet
+        - It basically just collects all the conversation titles from the
+            openai's html formatted data file (one variable is like 100mb)
+        - Right now it's using a google page to open the html file and 
+            scans and stores all those titles from the page
+        - Instead should just do it a local way without the google page
