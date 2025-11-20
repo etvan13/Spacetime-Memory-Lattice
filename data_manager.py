@@ -1,6 +1,7 @@
 import os
 import json
 import shutil
+import tempfile
 from typing import Dict, List, Optional
 from block_data import BlockData
 
@@ -70,8 +71,17 @@ class DataManager:
         ordered = dict(sorted(data.items(), key=lambda x: x[0]))
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(ordered, f, indent=4)
+
+        fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(ordered, f, indent=4, ensure_ascii=False)
+            os.replace(tmp, path)
+        finally:
+            try:
+                os.remove(tmp)
+            except FileNotFoundError:
+                pass
 
     # ── Core API ──────────────────────────────────────────────────────────────
     def create_coordinate_block(self, coordinate: str, block: BlockData) -> None:
